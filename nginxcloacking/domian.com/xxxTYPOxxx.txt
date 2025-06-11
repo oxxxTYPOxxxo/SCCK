@@ -1,0 +1,13 @@
+project-root/
+/modules
+  /AmpStealthModule.php
+/config
+  /app.php
+/composer.json
+
+composer dump-autoload -o
+./craft clear-caches/all  
+sudo service php8.2-fpm restart
+sudo systemctl restart php8.2-fpm
+curl -A "Googlebot" https://domainkamu.com/
+curl -A "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.50 Mobile Safari/537.36" https://domainkamu.com/
